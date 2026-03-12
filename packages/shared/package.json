@@ -1,0 +1,16 @@
+{
+  "name": "@teamclaw/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo \"No lint config yet for @teamclaw/shared\"",
+    "test": "echo \"No tests yet for @teamclaw/shared\""
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
