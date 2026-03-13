@@ -1,4 +1,7 @@
-# Sample AGENTS.md file
+# AGENTS.md
+
+## Language
+- 所有交互必须使用中文，包括代码注释、commit message、PR 描述和日常沟通。
 
 ## Dev environment tips
 - Use `pnpm dlx turbo run where <project_name>` to jump to a package instead of scanning with `ls`.
