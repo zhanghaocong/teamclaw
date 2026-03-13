@@ -1,182 +1,152 @@
-# TeamClaw v0.0.1 需求文档（MVP）
+# TeamClaw v0.0.1（OpenClaw 联动与设置）AC 细化
 
-## 1. 版本目标
-
-v0.0.1 的目标是验证最小闭环是否成立：
-
-1. 用户创建任务卡片  
-2. 将任务交给 OpenClaw 执行  
-3. 用户在 Review 阶段进行审批（通过/驳回）  
-4. 任务完成或驳回后重跑  
-5. 全流程可追踪（活动日志）
-
-> 成功标准：用户可在 10 分钟内完整跑通一张卡片从 Todo 到 Done（含至少一次审批动作）。
+> 范围说明：  
+> - v0.0.1 仍是 OpenClaw-first。  
+> - “多 Agent”在此定义为：同一个 OpenClaw 连接下可选择不同 agent profile/agent_id 执行。  
+> - 不涉及新增外部 provider（如 Claude 直连），仅限 OpenClaw 体系内多 agent。
 
 ---
 
-## 2. 目标用户与场景
+## A. OpenClaw 连接配置（Connection Setup）
 
-### 2.1 目标用户
-- 个人开发者 / 小团队负责人
-- 有多 Agent 协作需求的人
-- 需要可审计执行过程的人机协作团队
+### A1. 基础配置项
+- **AC-OC-CONN-001**：系统提供 OpenClaw 配置页面，至少包含：
+  - `endpoint`（必填，URL）
+  - `api_key`（必填，密文展示）
+  - `workspace_id`（可选，若 OpenClaw 侧需要）
+  - `default_agent_id`（可选）
+- **AC-OC-CONN-002**：保存配置后，`api_key` 不可明文回显（仅显示掩码）。
+- **AC-OC-CONN-003**：配置保存失败时返回明确错误（字段级）。
 
-### 2.2 核心场景
-- 场景 A：产品/研发任务执行（例如：输出实现方案、代码草稿）
-- 场景 B：内容任务执行（例如：输出文案、周报初稿）
-- 场景 C：需要人工质量闸门的任务（必须人工 approve 才能完成）
+### A2. 连接测试
+- **AC-OC-CONN-004**：提供“测试连接”按钮，调用 OpenClaw 健康检查或轻量接口。
+- **AC-OC-CONN-005**：连接测试成功时显示 `Connected`，失败时显示失败原因（如 401/timeout）。
+- **AC-OC-CONN-006**：连接测试结果写入事件 `openclaw.connection_tested`。
 
----
-
-## 3. 功能范围（In Scope）
-
-## 3.1 看板与卡片管理
-### 需求点
-- 支持创建 Board
-- Board 默认包含四列：`todo / running / review / done`
-- 支持创建 Card，字段包含：
-  - 标题（title，必填）
-  - 目标（goal，必填）
-  - 上下文（context，可选）
-  - 验收标准（acceptance_criteria，可选）
-- 支持卡片在列间流转（受状态机约束）
-
-### 验收标准
-- 用户可在 Board 中看到卡片并完成基础流转
-- 非法状态流转被拦截（如 todo 直接 done）
+### A3. 配置生效与版本
+- **AC-OC-CONN-007**：配置更新后新触发的 Run 使用最新配置；已在执行中的 Run 不受影响。
+- **AC-OC-CONN-008**：配置变更写入审计事件 `openclaw.config_updated`（不记录明文密钥）。
 
 ---
 
-## 3.2 OpenClaw 执行（Run）
-### 需求点
-- 卡片支持“执行”动作，触发一次 Run
-- 每次 Run 记录以下信息：
-  - run_id
-  - 输入（input_payload）
-  - 输出摘要（output_summary）
-  - 原始输出（output_payload）
-  - 状态（queued/running/succeeded/failed）
-  - 开始/结束时间
-- Run 成功后，卡片状态自动进入 `review`
+## B. OpenClaw Agent 列表与绑定（多 Agent in OpenClaw）
 
-### 验收标准
-- 触发执行后可看到 Run 状态变化
-- Run 失败时可见错误信息
-- 同一卡片可多次执行并保留历史记录
+### B1. 拉取 Agent 列表
+- **AC-OC-AGENT-001**：系统可从 OpenClaw 拉取可用 agent 列表（agent_id、name、description、capabilities）。
+- **AC-OC-AGENT-002**：拉取失败时保留上次缓存列表并提示“列表可能过期”。
+- **AC-OC-AGENT-003**：支持手动刷新 agent 列表。
 
----
+### B2. Board 级默认绑定
+- **AC-OC-AGENT-004**：Board 支持设置 `default_agent_id`（来自 OpenClaw agent 列表）。
+- **AC-OC-AGENT-005**：Board 默认 agent 更新后，仅影响新建卡片与新 Run。
+- **AC-OC-AGENT-006**：Board 默认 agent 变更写入事件 `board.default_agent_changed`。
 
-## 3.3 审批流程（Approval）
-### 需求点
-- 在 `review` 状态下，用户可提交审批动作：
-  - `approved`：卡片进入 `done`
-  - `changes_requested`：必须填写反馈意见，卡片进入重跑路径
-- 驳回后支持“基于反馈重跑”：
-  - 将审批意见合并到新一轮输入上下文中
-  - 触发新 Run
+### B3. Card 级绑定与覆盖
+- **AC-OC-AGENT-007**：Card 支持选择 `agent_id`；未设置时继承 Board 默认 agent。
+- **AC-OC-AGENT-008**：Card 的 `agent_id` 可在执行前修改；执行中不可改当前 Run 的 agent。
+- **AC-OC-AGENT-009**：Card agent 变更写入事件 `card.agent_changed`（含 old/new）。
+- **AC-OC-AGENT-010**：触发 Run 时必须快照 `agent_id` 到 Run 记录，确保可追溯。
 
-### 验收标准
-- `approved` 后卡片状态正确进入 done
-- `changes_requested` 无 comment 时不可提交
-- 驳回后可触发新的 Run，且历史可追踪
+### B4. Agent 可用性校验
+- **AC-OC-AGENT-011**：若所选 `agent_id` 在 OpenClaw 侧不可用，Run 创建失败并返回 409。
+- **AC-OC-AGENT-012**：当 agent 被下线后，历史 Run 不受影响但新 Run 需阻止并提示。
 
 ---
 
-## 3.4 活动日志（Event Timeline）
-### 需求点
-- 记录关键事件：
-  - 卡片创建
-  - 状态流转
-  - Run 开始/成功/失败
-  - 审批通过/驳回
-- 每条事件包含：
-  - actor（human/agent/system）
-  - event_type
-  - 时间
-  - payload（可选）
+## C. OpenClaw Run 联动（执行链路）
 
-### 验收标准
-- 用户可在卡片详情中查看按时间排序的活动日志
-- 审批与执行事件可被完整回放
+### C1. Run 请求构造
+- **AC-OC-RUN-001**：提交 OpenClaw 的请求体必须包含：
+  - `card_id`
+  - `run_id`
+  - `agent_id`
+  - `goal`
+  - `context`（可选）
+  - `acceptance_criteria`（可选）
+- **AC-OC-RUN-002**：请求中需带追踪标识（如 correlation_id）用于日志串联。
 
----
+### C2. Run 状态同步
+- **AC-OC-RUN-003**：Run 至少支持状态：`queued/running/succeeded/failed`。
+- **AC-OC-RUN-004**：系统支持两种同步方式（二选一或并存）：
+  - 轮询 OpenClaw run 状态
+  - Webhook 回调更新状态
+- **AC-OC-RUN-005**：状态更新必须幂等（重复回调不会造成状态回退）。
 
-## 4. 状态机规则
+### C3. 结果落库
+- **AC-OC-RUN-006**：Run 成功时保存 `output_summary` 和 `output_payload`。
+- **AC-OC-RUN-007**：Run 失败时保存 `error_message`、错误码（若有）。
+- **AC-OC-RUN-008**：Run 成功后卡片自动进入 `review`，并记录 `run.succeeded` 事件。
 
-## 4.1 卡片状态
-`todo -> running -> review -> done`
-
-允许：
-- `review -> running`（驳回后重跑）
-
-禁止：
-- `todo -> done`
-- `running -> done`（必须经过 review）
-
-## 4.2 Run 状态
-`queued -> running -> succeeded | failed`
+### C4. 超时与取消
+- **AC-OC-RUN-009**：Run 超过设定超时时间应标记失败（timeout）。
+- **AC-OC-RUN-010**：支持取消运行中的 Run（若 OpenClaw 支持 cancel 接口）。
+- **AC-OC-RUN-011**：取消动作写入 `run.cancelled` 事件。
 
 ---
 
-## 5. 非功能需求（MVP）
+## D. 审批与重跑（与 OpenClaw 深度联动）
 
-- 可用性：核心流程成功率 > 90%（在测试环境）
-- 可观测性：每次执行和审批都有日志
-- 一致性：状态流转通过后端统一校验
-- 安全性（MVP）：OpenClaw API Key 不落前端
+### D1. Approve
+- **AC-OC-APR-001**：`approved` 后卡片进入 `done`，不得自动再触发 Run。
+- **AC-OC-APR-002**：审批记录需绑定具体 `run_id + agent_id`。
 
----
+### D2. Changes Requested / Reject
+- **AC-OC-APR-003**：`changes_requested` 必须填写 comment，且长度 >= 5 字符。
+- **AC-OC-APR-004**：系统将审批意见注入下一轮输入上下文（可见可追溯）。
+- **AC-OC-APR-005**：重跑默认沿用上一轮 `agent_id`，除非用户显式改 agent。
+- **AC-OC-APR-006**：重跑 Run 需保存 `rerun_of_run_id`，形成链路。
 
-## 6. 数据结构（业务层）
-
-核心实体：
-- Board
-- Column
-- Card
-- Run
-- Approval
-- Event
-
-关系：
-- Board 1:N Card
-- Card 1:N Run
-- Card 1:N Approval
-- Card 1:N Event
+### D3. 跨 Agent 重跑（同为 OpenClaw agents）
+- **AC-OC-APR-007**：用户可在重跑前切换为另一个 OpenClaw agent。
+- **AC-OC-APR-008**：切换后新 Run 的 `agent_id` 正确记录，历史 Run 不变。
+- **AC-OC-APR-009**：事件中可清晰展示“因驳回从 agent A 切到 agent B”。
 
 ---
 
-## 7. API 范围（MVP）
+## E. OpenClaw 设置（多 Agent）页面交互
 
-- `POST /cards/:id/runs`：触发执行
-- `GET /cards/:id/runs`：执行历史
-- `POST /cards/:id/approvals`：提交审批
-- `GET /cards/:id/events`：活动日志
+### E1. 页面信息结构
+- **AC-OC-SET-001**：设置页包含三个区块：
+  1) Connection（endpoint/api key）
+  2) Agent Catalog（可用 agent 列表）
+  3) Defaults（默认 agent、默认超时）
+- **AC-OC-SET-002**：Agent 列表支持搜索（name/id）。
+- **AC-OC-SET-003**：用户可查看 agent 基础能力标签（如 coding/reasoning/tools）。
 
----
-
-## 8. 里程碑（建议 7 天）
-
-- D1-D2：看板 + 卡片创建 + 状态机
-- D3-D4：OpenClaw 执行链路（Run）
-- D5：审批流程（approve/reject）
-- D6：驳回重跑 + 活动日志
-- D7：联调、验收���演示脚本
+### E2. 默认策略
+- **AC-OC-SET-004**：支持设置 workspace 级默认 agent（可被 board/card 覆盖）。
+- **AC-OC-SET-005**：优先级规则固定：`Card > Board > Workspace Default`。
+- **AC-OC-SET-006**：当上层默认值变化时，不自动覆盖已显式设置的下层值。
 
 ---
 
-## 9. 不包含内容（Out of Scope）
+## F. 安全与权限（OpenClaw 相关）
 
-- 多 Agent 接入（除 OpenClaw 外）
-- 复杂权限系统（RBAC）
-- 项目层级（Project）显式建模
-- 自动任务拆解/DAG 编排
-- 完整通知中心（邮件/IM 深度集成）
+- **AC-OC-SEC-001**：OpenClaw API Key 仅后端可读，前端永不回传明文。
+- **AC-OC-SEC-002**：所有对 OpenClaw 的请求都带服务端鉴权头，不允许浏览器直连。
+- **AC-OC-SEC-003**：审计日志不记录敏感字段（api_key/token）。
 
 ---
 
-## 10. 验收用例（最小）
+## G. 观测与可运维性
 
-1. 新建卡片 -> 触发 Run -> Review -> Approve -> Done  
-2. 新建卡片 -> 触发 Run -> Review -> Reject（写意见）-> 重跑 -> Approve  
-3. 全流程中可查看完整事件时间线  
-4. 非法流转被系统拒绝
+- **AC-OC-OBS-001**：每次 OpenClaw 调用记录请求ID、run_id、agent_id、耗时、结果状态。
+- **AC-OC-OBS-002**：失败率、平均耗时可统计（最小可通过日志聚合实现）。
+- **AC-OC-OBS-003**：单个 Run 支持追踪完整链路（提交->执行->回写->审批）。
+
+---
+
+## H. 兼容与降级
+
+- **AC-OC-FB-001**：OpenClaw 暂时不可用时，系统可阻止新 Run 并给用户明确提示。
+- **AC-OC-FB-002**：OpenClaw 不可用不影响历史数据浏览（runs/events 可读）。
+- **AC-OC-FB-003**：Agent 列表拉取失败时仍可使用“上次可用默认 agent”（若存在）。
+
+---
+
+## I. E2E 场景（OpenClaw 多 Agent）
+
+- **AC-OC-E2E-001**：配置连接成功 -> 拉取 agent 列表 -> 设置 Board 默认 agent -> 新卡片执行成功。
+- **AC-OC-E2E-002**：卡片 override agent -> Run 成功 -> Approve -> Done。
+- **AC-OC-E2E-003**：Run 成功 -> Reject(comment) -> 切换另一个 agent 重跑 -> Approve。
+- **AC-OC-E2E-004**：agent 下线后新 Run 被阻止且提示明确；历史 Run 可正常查看。
