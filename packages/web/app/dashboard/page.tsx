@@ -1,3 +1,6 @@
+"use client"
+
+import dynamic from "next/dynamic"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
   Breadcrumb,
@@ -14,7 +17,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-export default function Page() {
+function Page() {
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -53,3 +56,5 @@ export default function Page() {
     </SidebarProvider>
   )
 }
+
+export default dynamic(() => Promise.resolve(Page), { ssr: false })
