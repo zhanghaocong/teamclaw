@@ -3,6 +3,9 @@
 ## Language
 - 所有交互必须使用中文，包括代码注释、commit message、PR 描述和日常沟通。
 
+## Code style
+- 代码命名使用 camelCase（小驼峰），包括变量、函数、方法等。
+
 ## Dev environment tips
 - Use `pnpm dlx turbo run where <project_name>` to jump to a package instead of scanning with `ls`.
 - Run `pnpm install --filter <project_name>` to add the package to your workspace so Vite, ESLint, and TypeScript can see it.
